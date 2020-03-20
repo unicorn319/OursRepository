@@ -5,12 +5,12 @@ import re
 
 
 class Summarizor:
-    def __init__(self, word2VecModelFilePath = 'Data/wiki_han_word2vec_300维度.model'):
-        self.sif = SIF.SIF(word2VecModelFilePath)
+    def __init__(self, word2VecModelFilePath = 'Data/wiki_han_word2vec_300维度.model', isUseThulac=False):
+        self.sif = SIF.SIF(word2VecModelFilePath, isUseThulac=isUseThulac)
 		
-    def _splitText(self, text:str, splitChar = '(。|！|\!|\.|？|\?|\n|\t)'):
+    def _splitText(self, text:str, splitChar = '(。|！|\!|？|\?|\n|\t)'):
         contents = re.split(splitChar, text)
-        print('句子切分：')
+        # print('句子切分分隔符：', splitChar)
         contents = ["".join([a, b]) if b != '\n' and b != '\t' else a + "。"
                     for a, b in zip(contents[0::2], contents[1::2])]
         contents = [content for content in contents if content.strip() != '' and content[0] != '。']
@@ -38,12 +38,12 @@ class Summarizor:
                     continue
             targetSimilarities[i] = (sumValue, item[1])
         # print("平滑后：")
-        # for i, item in enumerate(targetSimilarities):
+        # for i, item in enumerate(t        argetSimilarities):
         #     print(item[0])
         return targetSimilarities
 
-
     def _knnSmooth2(self, similarities):
+
         '''
         加入KNN平滑，控制为前后一句话，共计3
         '''
@@ -63,35 +63,44 @@ class Summarizor:
                 similaritiesKnn.append((sentenceVec, contentVec))
         return similaritiesKnn
 
-
-    def summarize(self, content:str, title:str = None, splitChar = '(。|！|\!|？|\?|\n|\t)', proportion = 0.3):
-        contents = self._splitText(content)
+    def summarize(self, content: str, title: str = None, splitChar='(。|！|\!|？|\?|\n|\t)', proportion=0.3):
+        contents = self._splitText(content, splitChar=splitChar)
 
         # 获取标题向量
-        if title != None :
+        if title != None:
+            title = title.strip()
+            if splitChar.find(title[len(title) - 1]) == -1:
+                title += '。'
             contents.insert(0, title)
         # 获取文章向量
         contents.append(content)
+
+        # print(' len(contents)',  len(contents))
+        if len(contents) <= 4:
+            return contents
 
         sentencesVec = self.sif.getSentencesEmbedding(contents)
 
         sentencesVec = list(sentencesVec)
         contentVec = sentencesVec.pop()
 
-        similarities = [(similarity.cosine_similarity(senVec, contentVec), index) for index, senVec in enumerate(sentencesVec)]
-        similarities2 = [(similarity.cosine_similarity(senVec, sentencesVec[0]), index) for index, senVec in enumerate(sentencesVec)]
-        similarities = [ ((sim1[0] * 0.382 + sim2[0] * 0.618), sim1[1]) for sim1, sim2 in zip(similarities, similarities2)]
+        similarities = [(similarity.cosine_similarity(senVec, contentVec), index) for index, senVec in
+                        enumerate(sentencesVec)]
+        similarities2 = [(similarity.cosine_similarity(senVec, sentencesVec[0]), index) for index, senVec in
+                         enumerate(sentencesVec)]
+        similarities = [((sim1[0] * 0.382 + sim2[0] * 0.618), sim1[1]) for sim1, sim2 in
+                        zip(similarities, similarities2)]
         # 相似度平滑 KNN
-        similarities = self._knnSmooth2(similarities)
+        similarities = self._knnSmooth(similarities)
 
         # 排序
         similarities.sort(reverse=True)
 
         summarySentenceIndexes = similarities[0: int(len(similarities) * proportion)]
-        print("summarySentenceIndexes:")
-        for i, sim in enumerate(summarySentenceIndexes):
-            print(i, "index:", sim[1], sim, contents[sim[1]])
-        summarySentences = [(index, contents[index]) for (cos, index) in summarySentenceIndexes ]
+        # print("summarySentenceIndexes:")
+        # for i, sim in enumerate(summarySentenceIndexes):
+        #     print(i, "index:", sim[1], sim, contents[sim[1]])
+        summarySentences = [(index, contents[index]) for (cos, index) in summarySentenceIndexes]
 
         summarySentences.sort()
 
@@ -99,12 +108,12 @@ class Summarizor:
 
 
 if __name__ == "__main__":
-    with open('Data/testArticle3.txt', 'r', encoding='utf-8') as testFile:
+    with open('Data/testArticle.txt', 'r', encoding='utf-8') as testFile:
         test_content = testFile.read()
-    summarizor = Summarizor()
-    summarySentences = summarizor.summarize(test_content, proportion = 0.1)
+    summarizor = Summarizor(word2VecModelFilePath='Data/word2vect_50_w5.model', isUseThulac=True)
+    summarySentences = summarizor.summarize(test_content, proportion = 0.3)
 
-    print("摘要：", "".join(summarySentences), "\n---------------------------------------------------")
+    # print("摘要：", "".join(summarySentences), "\n---------------------------------------------------")
     for i, sentence in enumerate(summarySentences):
         print(i, sentence)
 
